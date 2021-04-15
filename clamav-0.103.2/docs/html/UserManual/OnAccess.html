@@ -1,0 +1,152 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <title></title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <link rel="stylesheet" href="/en/github.css" type="text/css" />
+</head>
+<body>
+<h1 id="on-access-scanning">On-Access Scanning</h1>
+<h2 id="purpose">Purpose</h2>
+<p>This guide is for users interested in leveraging and understanding ClamAV's On-Access Scanning feature. It will walk through how to set up and use the On-Access Scanner and step through some common issues and their solutions.</p>
+<hr />
+<h2 id="requirements">Requirements</h2>
+<p>On-Access is only available on Linux systems. On Linux, On-Access requires a <code>kernel version &gt;= 3.8</code>. This is because it leverages a kernel api called <a href="http://man7.org/linux/man-pages/man7/fanotify.7.html">fanotify</a> to block processes from attempting to access malicious files. This prevention occurs in kernel-space, and thus offers stronger protection than a purely user-space solution.</p>
+<h4 id="for-versions-0.102.0">For Versions &gt;= 0.102.0</h4>
+<p>It also requires <code>Curl version &gt;= 7.45</code> to ensure support for all curl options used by clamonacc. Users on Linux operating systems that package older versions of libcurl have a number of options:</p>
+<ol>
+<li>Wait for your package maintainer to provide a newer version of libcurl.</li>
+<li>Install a newer version of libcurl <a href="https://curl.haxx.se/download.html">from source</a>.</li>
+<li>Disable installation of <code>clamonacc</code> and On-Access Scanning capabilities with the <code>./configure</code> flag <code>--disable-clamonacc</code>.</li>
+</ol>
+<hr />
+<h2 id="general-use">General Use</h2>
+<p>To use ClamAV's On-Access Scanner, operation will vary depending on version.</p>
+<h4 id="for-versions-0.102.0-1">For Versions &gt;= 0.102.0</h4>
+<p>You will need to run the <code>clamd</code> and <code>clamonacc</code> applications side by side. First, you will need to configure and run <code>clamd</code>. For instructions on how to do that, see <a href="../UserManual/Usage/Configuration.html#clamdconf">the clamd configuration guide</a>. One important thing to note while configuring <code>clamd.conf</code> is that--like <code>clamdscan</code>--the <code>clamonacc</code> application will connect to <code>clamd</code> using the <code>clamd.conf</code> settings for either <code>LocalSocket</code> or <code>TCPAddr</code>/<code>TCPSocket</code>. Another important thing to note, is that when using a <code>clamd.conf</code> that specifies a <code>LocalSocket</code>, then <code>clamd</code> will need to be run under a user with the right permissions to scan the files you plan on including in your watch-path.</p>
+<p>Next, you will need to configure <code>clamonacc</code>. For a very simple configuration, follow these steps:</p>
+<pre><code>1. Open `clamd.conf` for editing
+2. Specify the path(s) you would like to recursively watch by setting the `OnAccessIncludePath` option
+3. Set `OnAccessPrevention` to `yes`
+4. Check what username `clamd` is running under
+5. Set `OnAccessExcludeUname` to `clamd`&#39;s uname
+6. Save your work and close `clamd.conf`</code></pre>
+<p>For slightly more nuanced configurations, which may be adapted to your use case better, please check out the <a href="../UserManual/#configuration-and-recipes">recipe guide below</a>.</p>
+<p>Then, run <code>clamonacc</code> with elevated permissions</p>
+<blockquote>
+<p><code>$ sudo clamonacc</code></p>
+</blockquote>
+<p>If all went well, the On-Access scanner will fork to the background, and will now be actively protecting the path(s) specified with <code>OnAccessIncludePath</code>. You can test this by dropping an eicar file into the specified path, and attempting to read/access it (e.g. <code>cat eicar.txt</code>). This will result in an &quot;Operation not permitted&quot; message, triggered by fanotify blocking the access attempt at the kernel level.</p>
+<p>Finally, while you will have to restart both <code>clamd</code> and <code>clamonacc</code>. If default <code>clamonacc</code> performance is not to your liking, and your system has the resources available, we reccomend increasing the values for the following <code>clamd.conf</code> configuration options to increase performance:</p>
+<ul>
+<li><code>MaxQueue</code></li>
+<li><code>MaxThreads</code></li>
+<li><code>OnAccessMaxThreads</code></li>
+</ul>
+<h4 id="for-versions-0.101.x">For Versions &lt;= 0.101.x</h4>
+<p>You will only need to run the <code>clamd</code> application in older versions. First,<br />
+we reccomend you configure <code>clamd</code> for your environment. For instructions on how<br />
+to do that, see <a href="../UserManual/Usage/Configuration.html#clamdconf">the clamd configuration guide</a>.</p>
+<p>Next, you will need to configure On Access Scanning using the <code>clamd.conf</code> file. For a very simple configuration follow these steps:</p>
+<pre><code>1. Open `clamd.conf` for editing
+2. Set the `ScanOnAccess` option to `yes`
+3. Specify the path(s) you would like to recursively watch by setting the `OnAccessIncludePath` option
+4. Set `OnAccessPrevention` to `yes`
+6. Save your work and close `clamd.conf`</code></pre>
+<p>For slightly more nuanced configurations, which may be adapted to your use case better, please check out the <a href="../UserManual/#configuration-and-recipes">recipe guide below</a>.</p>
+<p>Then, run <code>clamd</code> with elevated permissions</p>
+<blockquote>
+<p><code>$ sudo clamd</code></p>
+</blockquote>
+<p>If all went well, the On-Access scanner will fork to the background, and will now be actively protecting the path(s) specified with <code>OnAccessIncludePath</code>. You can test this by dropping an eicar file into the specified path, and attempting to read/access it (e.g. <code>cat eicar.txt</code>). This will result in an &quot;Operation not permitted&quot; message, triggered by fanotify blocking the access attempt at the kernel level.</p>
+<hr />
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>Some OS distributors have disabled fanotify, despite kernel support. You can check for fanotify support on your kernel by running the command:</p>
+<blockquote>
+<p><code>$ cat /boot/config-&lt;kernel_version&gt; | grep FANOTIFY</code></p>
+</blockquote>
+<p>You should see the following:</p>
+<pre>
+    CONFIG_FANOTIFY=y
+    CONFIG_FANOTIFY_ACCESS_PERMISSIONS=y
+</pre>
+<p>If you see:</p>
+<pre>
+    # CONFIG_FANOTIFY_ACCESS_PERMISSIONS is not set
+</pre>
+<p>Then ClamAV's On-Access Scanner will still function, scanning and alerting on files normally in real time. However, it will be unable to block access attempts on malicious files. We call this <code>notify-only</code> mode.</p>
+<hr />
+<p>ClamAV's On-Access Scanning system uses a scheme called Dynamic Directory Determination (DDD for short) which is a shorthand way of saying that it tracks the layout of every directory specified with <code>OnAccessIncludePath</code> dynamically, and recursively, in real time. It does this by leveraging <a href="http://man7.org/linux/man-pages/man7/inotify.7.html">inotify</a> which by default has a limited number of watchpoints available for use by a process at any given time. Given the complexity of some directory hierarchies, ClamAV may warn you that it has exhausted its supply of inotify watchpoints (8192 by default). To increase the number of inotify watchpoints available for use by ClamAV (to 524288), run the following command:</p>
+<blockquote>
+<p><code>$ echo 524288 | sudo tee -a /proc/sys/fs/inotify/max_user_watches</code></p>
+</blockquote>
+<hr />
+<p>The <code>OnAccessIncludePath</code> option will not accept <code>/</code> as a valid path. This is because fanotify works by blocking a process' access to a file until a access_ok or access_denied determination has been made by the original fanotify calling process. Thus, by placing fanotify watchpoints on the entire filesystem, key system files may have their access blocked to key processes at the kernel level, which will result in a system lockup.</p>
+<p>This restriction was made to prevent users from &quot;shooting themselves in the foot.&quot; However, clever users will find it's possible to circumvent this restriction by using multiple <code>OnAccessIncludePath</code> options to recursively protect most of the filesystem anyways, or better still, simply the paths they truly care about.</p>
+<hr />
+<p>The <code>OnAccessMountPath</code> option uses a different fanotify api configuration which makes it incompatible with <code>OnAccessIncludePath</code> and the DDD System. Therefore, inotify watchpoint limitations will not be a concern when using this option. Unfortunately, this also means that the following options cannot be used in conjunction with <code>OnAccessMountPath</code>:</p>
+<ul>
+<li><code>OnAccessExtraScanning</code> - is built around catching inotify events.</li>
+<li><code>OnAccessExcludePath</code> - is built upon the DDD System.</li>
+<li><code>OnAccessPrevention</code> - would lock up the system if <code>/</code> was selected for <code>OnAccessMountPath</code>. If you need <code>OnAccessPrevention</code>, you should use <code>OnAccessIncludePath</code> instead of <code>OnAccessMountPath</code>.</li>
+</ul>
+<hr />
+<h2 id="configuration-and-recipes">Configuration and Recipes</h2>
+<p>More nuanced behavior can be coerced from ClamAV's On-Access Scanner via careful modification to <code>clamd.conf</code>. Each option related to On-Access Scanning is easily identified by looking for the <code>OnAccess</code> prefix pre-pended to each option. The default <code>clamd.conf</code> file contains descriptions of each option, along with any documented limitations or safety features.</p>
+<p>Below are examples of common use cases, recipes for the correct minimal configuration, and the expected behavioral result.</p>
+<hr />
+<h3 id="use-case-0x0">Use Case 0x0</h3>
+<ul>
+<li>User needs to watch the entire file system, but blocking malicious access attempts isn't a concern<br />
+<pre><br />
+ScanOnAccess yes ## versions &lt;= 0.101.x<br />
+OnAccessMountPath /<br />
+OnAccessExcludeRootUID yes<br />
+OnAccessExcludeUname clamav ## versions &gt;= 0.102<br />
+</pre></li>
+</ul>
+<p>This configuration will put the On-Access Scanner into <code>notify-only</code> mode. It will also ensure only non-root, non-clam, user processes will trigger scans against the filesystem.</p>
+<hr />
+<h3 id="use-case-0x1">Use Case 0x1</h3>
+<ul>
+<li>System Administrator needs to watch the home directory of multiple Users, but not all users. Blocking access attempts is un-needed.<br />
+<pre><br />
+ScanOnAccess yes ## versions &lt;= 0.101.x<br />
+OnAccessIncludePath /home<br />
+OnAccessExcludePath /home/user2<br />
+OnAccessExcludePath /home/user4<br />
+OnAccessExcludeUname clamav ## versions &gt;= 0.102<br />
+</pre></li>
+</ul>
+<p>With this configuration, the On-Access Scanner will watch the entirety of the <code>/home</code> directory recursively in <code>notify-only</code> mode. However, it will recursively exclude the <code>/home/user2</code> and <code>/home/user4</code> directories.</p>
+<hr />
+<h3 id="use-case-0x2">Use Case 0x2</h3>
+<ul>
+<li>The user needs to protect a single directory non-recursively and ensure all access attempts on malicious files are blocked.<br />
+<pre><br />
+ScanOnAccess yes ## versions &lt;= 0.101.x<br />
+OnAccessIncludePath /home/user/Downloads<br />
+OnAccessExcludeUname clamav ## versions &gt;= 0.102<br />
+OnAccessPrevention yes<br />
+OnAccessDisableDDD yes<br />
+</pre></li>
+</ul>
+<p>The configuration above will result in non-recursive real-time protection of the <code>/home/user/Downloads</code> directory by ClamAV's On-Access Scanner. Any access attempts that ClamAV detects on malicious files within the top level of the directory hierarchy will be blocked by fanotify at the kernel level.</p>
+<hr />
+<h2 id="command-line-options-for-versions-0.102">Command Line Options for Versions &gt;= 0.102</h2>
+<p>Beyond <code>clamd.conf</code> configuration, you can change the behaviour of the On-Access scanner by passing in a number of command line options. A list of all options can be retrieved with <code>--help</code>, but below is a list and explanation of some of options you might find most useful.</p>
+<ul>
+<li><code>--log=FILE</code> <code>-l FILE</code> - passing this option is important if you want a record of scan results, otherwise <code>clamonacc</code> will operate silently.</li>
+<li><code>--verbose</code> <code>-v</code> - primarily for debugging as this will increase the amount of noise in your log by quite a lot, but useful for troubleshooting potential connection problems</li>
+<li><code>--foreground</code> <code>-F</code> - forces <code>clamonacc</code> to not for the background, which is useful for debugging potential issues with during startup or runtime</li>
+<li><code>--include-list=FILE</code> <code>-e FILE</code> - allows users to pass a list of directories for clamonacc to watch, each directory must be a full path and seperated by a newline</li>
+<li><code>--exclude-list=FILE</code> <code>-e FILE</code> - same as include-list option, but for excluding at startup</li>
+<li><code>--remove</code> - after an infected verdict, an attempt will be made to remove the infected file</li>
+<li><code>--move=DIRECTORY</code> - just like the remove option, but infected file will be moved to the specified quarantine location instead</li>
+<li><code>--copy=DIRECTORY</code> - just like the move, except infected file is also left in place</li>
+</ul>
+</body>
+</html>

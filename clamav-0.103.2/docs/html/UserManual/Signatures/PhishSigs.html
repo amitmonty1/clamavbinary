@@ -1,0 +1,554 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <title></title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <link rel="stylesheet" href="/en/github.css" type="text/css" />
+</head>
+<body>
+<h1 id="phishsigs">PhishSigs</h1>
+<p>Table of Contents</p>
+<ul>
+<li><a href="#phishsigs">PhishSigs</a></li>
+<li><a href="#database-file-format">Database file format</a>
+<ul>
+<li><a href="#pdb-format">PDB format</a></li>
+<li><a href="#gdb-format">GDB format</a></li>
+<li><a href="#wdb-format">WDB format</a></li>
+<li><a href="#hints">Hints</a></li>
+<li><a href="#examples-of-pdb-signatures">Examples of PDB signatures</a></li>
+<li><a href="#examples-of-wdb-signatures">Examples of WDB signatures</a></li>
+<li><a href="#example-for-how-the-url-extractor-works">Example for how the URL extractor works</a></li>
+<li><a href="#how-matching-works">How matching works</a></li>
+<li><a href="#realurl-displayedurl-concatenation">RealURL, DisplayedURL concatenation</a></li>
+<li><a href="#what-happens-when-a-match-is-found">What happens when a match is found</a></li>
+<li><a href="#extraction-of-realurl-displayedurl-from-html-tags">Extraction of RealURL, DisplayedURL from HTML tags</a></li>
+<li><a href="#example">Example</a></li>
+<li><a href="#simple-patterns">Simple patterns</a></li>
+<li><a href="#regular-expressions">Regular expressions</a></li>
+<li><a href="#flags">Flags</a></li>
+</ul></li>
+<li><a href="#introduction-to-regular-expressions">Introduction to regular expressions</a>
+<ul>
+<li><a href="#special-characters">Special characters</a></li>
+<li><a href="#character-classes">Character classes</a></li>
+<li><a href="#escaping">Escaping</a></li>
+<li><a href="#alternation">Alternation</a></li>
+<li><a href="#optional-matching-and-repetition">Optional matching, and repetition</a></li>
+<li><a href="#groups">Groups</a></li>
+</ul></li>
+<li><a href="#how-to-create-database-files">How to create database files</a>
+<ul>
+<li><a href="#how-to-create-and-maintain-the-allow-list-dailywdb">How to create and maintain the allow list (daily.wdb)</a></li>
+<li><a href="#how-to-create-and-maintain-the-domain-list-dailypdb">How to create and maintain the domain list (daily.pdb)</a></li>
+<li><a href="#dealing-with-false-positives-and-undetected-phishing-mails">Dealing with false positives, and undetected phishing mails</a></li>
+<li><a href="#false-positives">False positives</a></li>
+<li><a href="#undetected-phish-mails">Undetected phish mails</a></li>
+</ul></li>
+</ul>
+<hr />
+<h2 id="database-file-format">Database file format</h2>
+<hr />
+<h3 id="pdb-format">PDB format</h3>
+<p>This file contains urls/hosts that are target of phishing attempts. It<br />
+contains lines in the following format:</p>
+<pre>
+    R[Filter]:RealURL:DisplayedURL[:FuncLevelSpec]
+    H[Filter]:DisplayedHostname[:FuncLevelSpec]
+</pre>
+<ul>
+<li><code>R</code></li>
+</ul>
+<p>regular expression, for the concatenated URL</p>
+<ul>
+<li><code>H</code></li>
+</ul>
+<p>matches the <code>DisplayedHostname</code> as a simple pattern (literally, no regular expression)</p>
+<ul>
+<li><p>the pattern can match either the full hostname</p></li>
+<li><p>or a subdomain of the specified hostname</p></li>
+<li><p>to avoid false matches in case of subdomain matches, the engine checks that there is a dot(<code>.</code>) or a space(` `) before the matched portion</p></li>
+<li><p><code>Filter</code></p></li>
+</ul>
+<p>is ignored for R and H for compatibility reasons</p>
+<ul>
+<li><code>RealURL</code></li>
+</ul>
+<p>is the URL the user is sent to, example: <em>href</em> attribute of an html anchor (<em>&lt;a&gt; tag</em>)</p>
+<ul>
+<li><code>DisplayedURL</code></li>
+</ul>
+<p>is the URL description displayed to the user, where its <em>claimed</em> they are sent, example: contents of an html anchor (<em>&lt;a&gt; tag</em>)</p>
+<ul>
+<li><code>DisplayedHostname</code></li>
+</ul>
+<p>is the hostname portion of the DisplayedURL</p>
+<ul>
+<li><code>FuncLevelSpec</code></li>
+</ul>
+<p>an (optional) functionality level, 2 formats are possible:</p>
+<ul>
+<li><p><code>minlevel</code> all engines having functionality level &gt;= <code>minlevel</code> will load this line</p></li>
+<li><p><code>minlevel-maxlevel</code> engines with functionality level (&gt;=) <code>minlevel</code>, and (&lt;) <code>maxlevel</code> will load this line</p></li>
+</ul>
+<hr />
+<h3 id="gdb-format">GDB format</h3>
+<p>This file contains URL hashes in the following format:</p>
+<pre><code>S:P:HostPrefix[:FuncLevelSpec]
+S:F:Sha256hash[:FuncLevelSpec]
+S1:P:HostPrefix[:FuncLevelSpec]
+S1:F:Sha256hash[:FuncLevelSpec]
+S2:P:HostPrefix[:FuncLevelSpec]
+S2:F:Sha256hash[:FuncLevelSpec]
+S:W:Sha256hash[:FuncLevelSpec]</code></pre>
+<ul>
+<li><code>S:</code></li>
+</ul>
+<p>These are hashes for Google Safe Browsing - malware sites, and should not be used for other purposes.</p>
+<ul>
+<li><code>S2:</code></li>
+</ul>
+<p>These are hashes for Google Safe Browsing - phishing sites, and should not be used for other purposes.</p>
+<ul>
+<li><code>S1:</code></li>
+</ul>
+<p>Hashes for blocking phishing sites. Virus name: Phishing.URL.Blacklisted</p>
+<ul>
+<li><code>S:W:</code></li>
+</ul>
+<p>Locally allowed hashes.</p>
+<ul>
+<li><code>HostPrefix</code></li>
+</ul>
+<p>4-byte prefix of the sha256 hash of the last 2 or 3 components of the hostname. If prefix doesn’t match, no further lookups are performed.</p>
+<ul>
+<li><code>Sha256hash</code></li>
+</ul>
+<p>sha256 hash of the canonicalized URL, or a sha256 hash of its prefix/suffix according to the Google Safe Browsing “Performing Lookups” rules. There should be a corresponding <code>:P:HostkeyPrefix</code> entry for the hash to be taken into consideration.</p>
+<p>To see which hash/URL matched, look at the <code>clamscan --debug</code> output, and look for the following strings: <code>Looking up hash</code>, <code>prefix matched</code>, and <code>Hash matched</code>. To ignore .gdb entries, create a local.gdb file, and adding a line <code>S:W:&lt;HASH&gt;</code>.</p>
+<hr />
+<h3 id="wdb-format">WDB format</h3>
+<p>This file contains url pairs for links that may look suspicious but are safe and should be allowed. It contains lines in the following format:</p>
+<pre>
+    X:RealURL:DisplayedURL[:FuncLevelSpec]
+    M:RealHostname:DisplayedHostname[:FuncLevelSpec]
+</pre>
+<ul>
+<li><code>X</code></li>
+</ul>
+<p>regular expression, for the <em>entire URL</em>, not just the hostname</p>
+<ul>
+<li><p>The regular expression is by default anchored to start-of-line and end-of-line, as if you have used <code>^RegularExpression$</code></p></li>
+<li><p>A trailing <code>/</code> is automatically added both to the regex, and the input string to avoid false matches</p></li>
+<li><p>The regular expression matches the <em>concatenation</em> of the RealURL, a colon(<code>:</code>), and the DisplayedURL as a single string. It doesn’t separately match RealURL and DisplayedURL!</p></li>
+<li><p><code>M</code></p></li>
+</ul>
+<p>matches hostname, or subdomain of it, see notes for H above</p>
+<hr />
+<h3 id="hints">Hints</h3>
+<ul>
+<li><p>empty lines are ignored</p></li>
+<li><p>the colons are mandatory</p></li>
+<li><p>Don’t leave extra spaces on the end of a line!</p></li>
+<li><p>if any of the lines don’t conform to this format, clamav will abort with a Malformed Database Error</p></li>
+<li><p>see section <a href="#Extraction-of-RealURL,-DisplayedURL-from-HTML-tags">Extraction-of-RealURL</a> for more details on RealURL/DisplayedURL</p></li>
+</ul>
+<hr />
+<h3 id="examples-of-pdb-signatures">Examples of PDB signatures</h3>
+<p>To check for phishing mails that target amazon.com, or subdomains of<br />
+amazon.com:</p>
+<pre>
+    H:amazon.com
+</pre>
+<p>To do the same, but for amazon.co.uk:</p>
+<pre>
+    H:amazon.co.uk
+</pre>
+<p>To limit the signatures to certain engine versions:</p>
+<pre>
+    H:amazon.co.uk:20-30
+    H:amazon.co.uk:20-
+    H:amazon.co.uk:0-20
+</pre>
+<p>First line: engine versions 20, 21, ..., 29 can load it</p>
+<p>Second line: engine versions &gt;= 20 can load it</p>
+<p>Third line: engine versions &lt; 20 can load it</p>
+<p>In a real situation, you’d probably use the second form. A situation like that would be if you are using a feature of the signatures not available in earlier versions, or if earlier versions have bugs with your signature. Its neither case here, the above examples are for illustrative purposes only.</p>
+<hr />
+<h3 id="examples-of-wdb-signatures">Examples of WDB signatures</h3>
+<p>To allow amazon’s country specific domains and amazon.com, to mix domain names in DisplayedURL, and RealURL:</p>
+<pre><code>X:.+\.amazon\.(at|ca|co\.uk|co\.jp|de|fr)([/?].*)?:.+\.amazon\.com([/?].*)?:17-</code></pre>
+<p>Explanation of this signature:</p>
+<ul>
+<li><code>X:</code></li>
+</ul>
+<p>this is a regular expression</p>
+<ul>
+<li><code>:17-</code></li>
+</ul>
+<p>load signature only for engines with functionality level &gt;= 17 (recommended for type X)</p>
+<p>The regular expression is the following (X:, :17- stripped, and a / appended)</p>
+<pre>
+    .+\.amazon\.(at|ca|co\.uk|co\.jp|de|fr)([/?].*)?:.+\.amazon\.com([/?].*)?/
+</pre>
+<p>Explanation of this regular expression (note that it is a single regular expression, and not 2 regular expressions splitted at the :).</p>
+<ul>
+<li><code>.+</code></li>
+</ul>
+<p>any subdomain of</p>
+<ul>
+<li><code>\.amazon\.</code></li>
+</ul>
+<p>domain we are allowing (RealURL part)</p>
+<ul>
+<li><code>(at|ca|co\.uk|co\.jp|de|fr)</code></li>
+</ul>
+<p>country-domains: at, ca, co.uk, co.jp, de, fr</p>
+<ul>
+<li><code>([/?].*)?</code></li>
+</ul>
+<p>recomended way to end the real url, this protects against embedded URLs (evilurl.example.com/amazon.co.uk/)</p>
+<ul>
+<li><code>:</code></li>
+</ul>
+<p>RealURL and DisplayedURL are concatenated via a :, so match a literal : here</p>
+<ul>
+<li><code>.+</code></li>
+</ul>
+<p>any subdomain of</p>
+<ul>
+<li><code>\.amazon\.com</code></li>
+</ul>
+<p>allowed DisplayedURL</p>
+<ul>
+<li><code>([/?].*)?</code></li>
+</ul>
+<p>recommended way to end displayed url part, to protect against embedded URLs</p>
+<ul>
+<li><code>/</code></li>
+</ul>
+<p>automatically added to further protect against embedded URLs</p>
+<p>When you add an entry, make sure you check that both domains are owned by the same entity. This signature allows links claiming to point to amazon.com (DisplayedURL), when in fact they really go to a country-specific domain of amazon (RealURL).</p>
+<hr />
+<h3 id="example-for-how-the-url-extractor-works">Example for how the URL extractor works</h3>
+<p>Consider the following HTML file:</p>
+<p><code>&lt;html&gt;</code><br />
+<code>&lt;a href=&quot;http://1.realurl.example.com/&quot;&gt;</code><br />
+<code>1.displayedurl.example.com</code><br />
+<code>&lt;/a&gt;</code><br />
+<code>&lt;a href=&quot;http://2.realurl.example.com&quot;&gt;</code><br />
+<code>2 d&lt;b&gt;i&lt;p&gt;splayedurl.e&lt;/b&gt;xa&lt;i&gt;mple.com</code><br />
+<code>&lt;/a&gt;</code><br />
+<code>&lt;a href=&quot;http://3.realurl.example.com&quot;&gt;</code><br />
+<code>3.nested.example.com</code><br />
+<code>&lt;a href=&quot;http://4.realurl.example.com&quot;&gt;</code><br />
+<code>4.displayedurl.example.com</code><br />
+<code>&lt;/a&gt;</code><br />
+<code>&lt;/a&gt;</code><br />
+<code>&lt;form action=&quot;http://5.realurl.example.com&quot;&gt;</code><br />
+<code>sometext</code><br />
+<code>&lt;img src=&quot;http://5.displayedurl.example.com/img0.gif&quot;/&gt;</code><br />
+<code>&lt;a href=&quot;http://5.form.nested.displayedurl.example.com&quot;&gt;</code><br />
+<code>5.form.nested.link-displayedurl.example.com</code><br />
+<code>&lt;/a&gt;</code><br />
+<code>&lt;/form&gt;</code><br />
+<code>&lt;a href=&quot;http://6.realurl.example.com&quot;&gt;</code><br />
+<code>6.displ</code><br />
+<code>&lt;img src=&quot;6.displayedurl.example.com/img1.gif&quot;/&gt;</code><br />
+<code>ayedurl.example.com</code><br />
+<code>&lt;/a&gt;</code><br />
+<code>&lt;a href=&quot;http://7.realurl.example.com&quot;&gt;</code><br />
+<code>&lt;iframe src=&quot;http://7.displayedurl.example.com&quot;&gt;</code><br />
+<code>&lt;/a&gt;</code></p>
+<p>The phishing engine extract the following<br />
+RealURL/DisplayedURL pairs from it:</p>
+<pre>
+    http://1.realurl.example.com/
+    1.displayedurl.example.com
+
+    http://2.realurl.example.com
+    2displayedurl.example.com
+
+    http://3.realurl.example.com
+    3.nested.example.com
+
+    http://4.realurl.example.com
+    4.displayedurl.example.com
+
+    http://5.realurl.example.com
+    http://5.displayedurl.example.com/img0.gif
+
+    http://5.realurl.example.com
+    http://5.form.nested.displayedurl.example.com
+
+    http://5.form.nested.displayedurl.example.com
+    5.form.nested.link-displayedurl.example.com
+
+    http://6.realurl.example.com
+    6.displayedurl.example.com
+
+    http://6.realurl.example.com
+    6.displayedurl.example.com/img1.gif
+</pre>
+<hr />
+<h3 id="how-matching-works">How matching works</h3>
+<hr />
+<h4 id="realurl-displayedurl-concatenation">RealURL, DisplayedURL concatenation</h4>
+<p>The phishing detection module processes pairs of RealURL/DisplayedURL. Matching against daily.wdb is done as follows: the RealURL is concatenated with a <code>:</code>, and with the DisplayedURL, then that <em>line</em> is matched against the lines in daily.wdb/daily.pdb</p>
+<p>So if you have this line in daily.wdb:</p>
+<pre>
+    M:www.google.ro:www.google.com
+</pre>
+<p>This href: <code>&lt;a href='http://www.google.ro'&gt;www.google.com&lt;/a&gt;</code> then it will be allowed, but: <code>&lt;a href='http://images.google.com'&gt;www.google.com&lt;/a&gt;</code> will not.</p>
+<hr />
+<h4 id="what-happens-when-a-match-is-found">What happens when a match is found</h4>
+<p>In the case of the allow list, a match means that the RealURL/DisplayedURL combination is considered clean, and no further checks are performed on it.</p>
+<p>In the case of the domain list, a match means that the RealURL/DisplayedURL is going to be checked for phishing attempts.</p>
+<p>Furthermore you can restrict what checks are to be performed by specifying the 3-digit hexnumber.</p>
+<hr />
+<h4 id="extraction-of-realurl-displayedurl-from-html-tags">Extraction of RealURL, DisplayedURL from HTML tags</h4>
+<p>The html parser extracts pairs of RealURL/DisplayedURL based on the following rules.</p>
+<p>In version 0.93: After URLs have been extracted, they are normalized, and cut after the hostname. <code>http://test.example.com/path/somecgi?queryparameters</code> becomes <code>http://test.example.com/</code></p>
+<ul>
+<li><code>a</code></li>
+</ul>
+<p>(anchor) the <em>href</em> is the RealURL, its <em>contents</em> is the DisplayedURL</p>
+<ul>
+<li>contents<br />
+is the tag-stripped contents of the &lt;a&gt; tags, so for example &lt;b&gt; tags are stripped (but not their contents)</li>
+</ul>
+<p>nesting another &lt;a&gt; tag withing an &lt;a&gt; tag (besides being invalid html) is treated as a &lt;/a&gt;&lt;a..</p>
+<ul>
+<li><code>form</code></li>
+</ul>
+<p>the <em>action</em> attribute is the RealURL, and a nested &lt;a&gt; tag is the DisplayedURL</p>
+<ul>
+<li><code>img/area</code></li>
+</ul>
+<p>if nested within an <em>&lt;a&gt;</em> tag, the RealURL is the <em>href</em> of the a tag, and the <em>src/dynsrc/area</em> is the DisplayedURL of the img</p>
+<p>if nested withing a <em>form</em> tag, then the action attribute of the <em>form</em> tag is the RealURL</p>
+<ul>
+<li><code>iframe</code></li>
+</ul>
+<p>if nested withing an <em>&lt;a&gt;</em> tag the <em>src</em> attribute is the DisplayedURL, and the <em>href</em> of its parent <em>a</em> tag is the RealURL</p>
+<p>if nested withing a <em>form</em> tag, then the action attribute of the <em>form</em> tag is the RealURL</p>
+<hr />
+<h4 id="example">Example</h4>
+<p>Consider this html file:</p>
+<p><code>&lt;a href=”evilurl”\&gt;www.paypal.com\&lt;/a\&gt;*</code><br />
+<code>`    &lt;a href=”evilurl2” title=”www.ebay.com”\&gt;click here to sign` `    in\&lt;/a\&gt;*`</code><br />
+<code>&lt;form action=”evilurl_form”\&gt;*</code><br />
+<code>`    *Please sign in to \&lt;a href=”cgi.ebay.com”\&gt;Ebay\&lt;/a\using this` `    form*`</code><br />
+<code>&lt;input type=’text’ name=’username’\&gt;Username\&lt;/input\&gt;*</code><br />
+<code>`    *....*`</code><br />
+<code>&lt;/form\&gt;*</code><br />
+`<code></code> <a href=”evilurl”\>&lt;img src=”images.paypal.com/secure.jpg”&gt;&lt;/a&gt;*`</p>
+<p>The resulting RealURL/DisplayedURL pairs will be (note that one tag can generate multiple pairs):</p>
+<ul>
+<li><p>evilurl / www.paypal.com</p></li>
+<li><p>evilurl2 / click here to sign in</p></li>
+<li><p>evilurl2 / www.ebay.com</p></li>
+<li><p>evilurl_form / cgi.ebay.com</p></li>
+<li><p>cgi.ebay.com / Ebay</p></li>
+<li><p>evilurl / image.paypal.com/secure.jpg</p></li>
+</ul>
+<hr />
+<h3 id="simple-patterns">Simple patterns</h3>
+<p>Simple patterns are matched literally, i.e. if you say:</p>
+<pre>
+    www.google.com
+</pre>
+<p>it is going to match <em>www.google.com</em>, and only that. The <em>. (dot)</em> character has no special meaning (see the section on regexes <a href="#sec:Regular-expressions">[sec:Regular-expressions]</a> for how the <em>.(dot)</em> character behaves there)</p>
+<hr />
+<h3 id="regular-expressions">Regular expressions</h3>
+<p>POSIX regular expressions are supported, and you can consider that internally it is wrapped by <em>^</em>, and <em>$.</em> In other words, this means that the regular expression has to match the entire concatenated (see section <a href="#RealURL,-DisplayedURL-concatenation">RealURL,-DisplayedURL-concatenation</a> for details on concatenation) url.</p>
+<p>It is recomended that you read section <a href="#Introduction-to-regular">Introduction-to-regular</a> to learn how to write regular expressions, and then come back and read this for hints.</p>
+<p>Be advised that clamav contains an internal, very basic regex matcher to reduce the load on the regex matching core. Thus it is recomended that you avoid using regex syntax not supported by it at the very beginning of regexes (at least the first few characters).</p>
+<p>Currently the clamav regex matcher supports:</p>
+<ul>
+<li><p><code>.</code> (dot) character</p></li>
+<li><p><code>\(\backslash\)</code> (escaping special characters)</p></li>
+<li><p><code>|</code> (pipe) alternatives</p></li>
+<li><p><code>\[\]</code> (character classes)</p></li>
+<li><p><code>()</code> (parenthesis for grouping, but no group extraction is performed)</p></li>
+<li><p>other non-special characters</p></li>
+</ul>
+<p>Thus the following are not supported:</p>
+<ul>
+<li><p><code>\+</code> repetition</p></li>
+<li><p><code>\*</code> repetition</p></li>
+<li><p><code>{}</code> repetition</p></li>
+<li><p>backreferences</p></li>
+<li><p>lookaround</p></li>
+<li><p>other “advanced” features not listed in the supported list ;)</p></li>
+</ul>
+<p>This however shouldn’t discourage you from using the “not directly supported features “, because if the internal engine encounters unsupported syntax, it passes it on to the POSIX regex core (beginning from the first unsupported token, everything before that is still processed by the internal matcher). An example might make this more clear:</p>
+<pre>
+    *www\(\backslash\).google\(\backslash\).(com|ro|it) (\[a-zA-Z\])+\(\backslash\).google\(\backslash\).(com|ro|it)*
+</pre>
+<p>Everything till <em>([a-zA-Z])+</em> is processed internally, that parenthesis (and everything beyond) is processed by the posix core.</p>
+<p>Examples of url pairs that match:</p>
+<ul>
+<li><p><em>www.google.ro images.google.ro</em></p></li>
+<li><p>www.google.com images.google.ro</p></li>
+</ul>
+<p>Example of url pairs that don’t match:</p>
+<ul>
+<li><p>www.google.ro images1.google.ro</p></li>
+<li><p>images.google.com image.google.com</p></li>
+</ul>
+<hr />
+<h3 id="flags">Flags</h3>
+<p>Flags are a binary OR of the following numbers:</p>
+<pre><code>| Flag                 | Value |
+|----------------------|-------|
+| HOST_SUFFICIENT      | 1     |
+| DOMAIN_SUFFICIENT    | 2     |
+| DO_REVERSE_LOOKUP    | 4     |
+| CHECK_REDIR          | 8     |
+| CHECK_SSL            | 16    |
+| CHECK_CLOAKING       | 32    |
+| CLEANUP_URL          | 64    |
+| CHECK_DOMAIN_REVERSE | 128   |
+| CHECK_IMG_URL        | 256   |
+| DOMAINLIST_REQUIRED  | 512   |</code></pre>
+<p>The names of the constants are self-explanatory.</p>
+<p>These constants are defined in libclamav/phishcheck.h, you can check there for the latest flags.</p>
+<p>There is a default set of flags that are enabled, these are currently:</p>
+<pre><code>( CLEANUP_URL | CHECK_SSL | CHECK_CLOAKING | CHECK_IMG_URL )</code></pre>
+<p>ssl checking is performed only for a tags currently.</p>
+<p>You must decide for each line in the domain list if you want to filter any flags (that is you don’t want certain checks to be done), and then calculate the binary OR of those constants, and then convert it into a 3-digit hexnumber. For example you devide that domain_sufficient shouldn’t be used for ebay.com, and you don’t want to check images either, so you come up with this flag number: (2|256\Rightarrow)258((decimal)\Rightarrow102(hexadecimal))</p>
+<p>So you add this line to daily.wdb:</p>
+<ul>
+<li>R102 www.ebay.com .+</li>
+</ul>
+<hr />
+<h2 id="introduction-to-regular-expressions">Introduction to regular expressions</h2>
+<p>Recomended reading:</p>
+<ul>
+<li><p><a href="http://www.regular-expressions.info/quickstart.html" class="uri">http://www.regular-expressions.info/quickstart.html</a></p></li>
+<li><p><a href="http://www.regular-expressions.info/tutorial.html" class="uri">http://www.regular-expressions.info/tutorial.html</a></p></li>
+<li><p>regex(7) man-page: <a href="http://www.tin.org/bin/man.cgi?section=7\&amp;topic=regex" class="uri">http://www.tin.org/bin/man.cgi?section=7\&amp;topic=regex</a></p></li>
+</ul>
+<hr />
+<h3 id="special-characters">Special characters</h3>
+<ul>
+<li>[</li>
+</ul>
+<p>the opening square bracket - it marks the beginning of a character class, see section<a href="#Character-classes">Character-classes</a></p>
+<ul>
+<li>(\backslash)</li>
+</ul>
+<p>the backslash - escapes special characters, see section <a href="#Escaping">Escaping</a></p>
+<ul>
+<li>^</li>
+</ul>
+<p>the caret - matches the beginning of a line (not needed in clamav regexes, this is implied)</p>
+<ul>
+<li>$</li>
+</ul>
+<p>the dollar sign - matches the end of a line (not needed in clamav regexes, this is implied)</p>
+<ul>
+<li>̇</li>
+</ul>
+<p>the period or dot - matches <em>any</em> character</p>
+<ul>
+<li>|</li>
+</ul>
+<p>the vertical bar or pipe symbol - matches either of the token on its left and right side, see section <a href="#sub:Alternation">Alternation</a></p>
+<ul>
+<li>?</li>
+</ul>
+<p>the question mark - matches optionally the left-side token, see section<a href="Optional-matching,-and" class="uri">Optional-matching,-and</a></p>
+<ul>
+<li>*</li>
+</ul>
+<p>the asterisk or star - matches 0 or more occurences of the left-side token, see section <a href="Optional-matching,-and" class="uri">Optional-matching,-and</a></p>
+<ul>
+<li><ul>
+<li></li>
+</ul></li>
+</ul>
+<p>the plus sign - matches 1 or more occurences of the left-side token, see section <a href="Optional-matching,-and" class="uri">Optional-matching,-and</a></p>
+<ul>
+<li>(</li>
+</ul>
+<p>the opening round bracket - marks beginning of a group, see section <a href="Groups" class="uri">Groups</a></p>
+<ul>
+<li>)</li>
+</ul>
+<p>the closing round bracket - marks end of a group, see section<a href="Groups" class="uri">Groups</a></p>
+<hr />
+<h3 id="character-classes">Character classes</h3>
+<hr />
+<h3 id="escaping">Escaping</h3>
+<p>Escaping has two purposes:</p>
+<ul>
+<li><p>it allows you to actually match the special characters themselves, for example to match the literal <em>+</em>, you would write <em>(\backslash)+</em></p></li>
+<li><p>it also allows you to match non-printable characters, such as the tab (<em>(\backslash)t</em>), newline (<em>(\backslash)n</em>), ..</p></li>
+</ul>
+<p>However since non-printable characters are not valid inside an url, you won’t have a reason to use them.</p>
+<hr />
+<h3 id="alternation">Alternation</h3>
+<hr />
+<h3 id="optional-matching-and-repetition">Optional matching, and repetition</h3>
+<hr />
+<h3 id="groups">Groups</h3>
+<p>Groups are usually used together with repetition, or alternation. For example: <em>(com|it)+</em> means: match 1 or more repetitions of <em>com</em> or <em>it,</em> that is it matches: com, it, comcom, comcomcom, comit, itit, ititcom,... you get the idea.</p>
+<p>Groups can also be used to extract substring, but this is not supported by the clam engine, and not needed either in this case.</p>
+<hr />
+<h2 id="how-to-create-database-files">How to create database files</h2>
+<hr />
+<h3 id="how-to-create-and-maintain-the-allow-list-daily.wdb">How to create and maintain the allow list (daily.wdb)</h3>
+<p>If the phishing code claims that a certain mail is phishing, but its not, you have 2 choices:</p>
+<ul>
+<li><p>examine your rules daily.pdb, and fix them if necessary (see: section<a href="How-to-create" class="uri">How-to-create</a>)</p></li>
+<li><p>add it to the allow list (discussed here)</p></li>
+</ul>
+<p>Lets assume you are having problems because of links like this in a mail:</p>
+<p><code>&lt;a href=''http://69.0.241.57/bCentral/L.asp?L=XXXXXXXX''&gt;</code><br />
+<code>http://www.bcentral.it/</code><br />
+<code>&lt;/a&gt;</code></p>
+<p>After investigating those sites further, you decide they are no threat, and create a line like this in daily.wdb:</p>
+<pre>
+    R http://www\(\backslash\).bcentral\(\backslash\).it/.+
+    http://69\(\backslash\).0\(\backslash\).241\(\backslash\).57/bCentral/L\(\backslash\).asp?L=.+
+</pre>
+<p>Note: urls like the above can be used to track unique mail recipients, and thus know if somebody actually reads mails (so they can send more spam). However since this site required no authentication information, it is safe from a phishing point of view.</p>
+<hr />
+<h3 id="how-to-create-and-maintain-the-domain-list-daily.pdb">How to create and maintain the domain list (daily.pdb)</h3>
+<p>When not using <code>--phish-scan-alldomains</code> (production environments for example), you need to decide which urls you are going to check.</p>
+<p>Although at a first glance it might seem a good idea to check everything, it would produce false positives. Particularly newsletters, ads, etc. are likely to use URLs that look like phishing attempts.</p>
+<p>Lets assume that you’ve recently seen many phishing attempts claiming they come from Paypal. Thus you need to add paypal to daily.pdb:</p>
+<pre>
+    R .+ .+\(\backslash\).paypal\(\backslash\).com
+</pre>
+<p>The above line will block (detect as phishing) mails that contain urls that claim to lead to paypal, but they don’t in fact.</p>
+<p>Be carefull not to create regexes that match a too broad range of urls though.</p>
+<hr />
+<h3 id="dealing-with-false-positives-and-undetected-phishing-mails">Dealing with false positives, and undetected phishing mails</h3>
+<hr />
+<h4 id="false-positives">False positives</h4>
+<p>Whenever you see a false positive (mail that is detected as phishing, but its not), you need to examine <em>why</em> clamav decided that its phishing. You can do this easily by building clamav with debugging (<code>./configure --enable-experimental --enable-debug</code>), and then running a tool:</p>
+<pre>
+    $contrib/phishing/why.py phishing.eml
+</pre>
+<p>This will show the url that triggers the phish verdict, and a reason why that url is considered phishing attempt.</p>
+<p>Once you know the reason, you might need to modify daily.pdb (if one of yours rules inthere are too broad), or you need to add the url to daily.wdb. If you think the algorithm is incorrect, please file a bug report on bugzilla.clamav.net, including the output of <em>why.py</em>.</p>
+<hr />
+<h4 id="undetected-phish-mails">Undetected phish mails</h4>
+<p>Using why.py doesn’t help here unfortunately (it will say: clean), so all you can do is:</p>
+<pre>
+    $clamscan/clamscan --phish-scan-alldomains undetected.eml
+</pre>
+<p>And see if the mail is detected, if yes, then you need to add an appropriate line to daily.pdb (see section <a href="How-to-create" class="uri">How-to-create</a>).</p>
+<p>If the mail is not detected, then try using:</p>
+<pre>
+    $clamscan/clamscan --debug undetected.eml|less
+</pre>
+<p>Then see what urls are being checked, see if any of them is in an allow list, see if all urls are detected, etc.</p>
+</body>
+</html>
